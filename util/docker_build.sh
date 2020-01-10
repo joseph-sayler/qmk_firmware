@@ -5,6 +5,7 @@ errcho() {
 	echo "$@" >&2
 }
 
+DOCKER_EXEC=docker
 USAGE="Usage: $0 [keyboard[:keymap[:target]]]"
 
 # Check preconditions
@@ -18,9 +19,14 @@ if [ $# -gt 1 ]; then
 	errcho "$USAGE"
 	exit 1
 elif ! command -v docker >/dev/null 2>&1; then
-	errcho "Error: docker not found"
-	errcho "See https://docs.docker.com/install/#supported-platforms for installation instructions"
-	exit 2
+	# if docker not installed, check if podman is
+	if command -v podman > /dev/null 2>&1; then
+		DOCKER_EXEC=podman
+	else
+		errcho "Error: docker not found"
+		errcho "See https://docs.docker.com/install/#supported-platforms for installation instructions"
+		exit 2
+	fi
 fi
 
 # Determine arguments
@@ -37,9 +43,6 @@ else
 		exit 1
 	fi
 fi
-if [ -z "$keyboard" ]; then
-	keyboard=all
-fi
 if [ -n "$target" ]; then
 	if [ "$(uname)" = "Linux" ] || docker-machine active >/dev/null 2>&1; then
 		usb_args="--privileged -v /dev:/dev"
@@ -53,7 +56,7 @@ fi
 dir=$(pwd -W 2>/dev/null) || dir=$PWD  # Use Windows path if on Windows
 
 # Run container and build firmware
-docker run --rm -it $usb_args \
+$DOCKER_EXEC run --rm -it $usb_args \
 	--user $(id -u):$(id -g) \
 	-w /qmk_firmware \
 	-v "$dir":/qmk_firmware \
@@ -62,3 +65,4 @@ docker run --rm -it $usb_args \
 	-e MAKEFLAGS="$MAKEFLAGS" \
 	qmkfm/base_container \
 	make "$keyboard${keymap:+:$keymap}${target:+:$target}"
+
